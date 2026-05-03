@@ -3,6 +3,102 @@ document.addEventListener("DOMContentLoaded", () => {
   const activitySelect = document.getElementById("activity");
   const signupForm = document.getElementById("signup-form");
   const messageDiv = document.getElementById("message");
+  const loginBtn = document.getElementById("login-btn");
+  const logoutBtn = document.getElementById("logout-btn");
+  const teacherNameSpan = document.getElementById("teacher-name");
+  const loginModal = document.getElementById("login-modal");
+  const loginForm = document.getElementById("login-form");
+  const cancelLoginBtn = document.getElementById("cancel-login-btn");
+  const loginError = document.getElementById("login-error");
+  const signupContainer = document.getElementById("signup-container");
+
+  // Session state
+  let sessionToken = sessionStorage.getItem("sessionToken") || null;
+  let teacherName = sessionStorage.getItem("teacherName") || null;
+
+  function isLoggedIn() {
+    return !!sessionToken;
+  }
+
+  function updateAuthUI() {
+    if (isLoggedIn()) {
+      loginBtn.classList.add("hidden");
+      logoutBtn.classList.remove("hidden");
+      teacherNameSpan.textContent = `👤 ${teacherName}`;
+      teacherNameSpan.classList.remove("hidden");
+      signupContainer.classList.remove("hidden");
+    } else {
+      loginBtn.classList.remove("hidden");
+      logoutBtn.classList.add("hidden");
+      teacherNameSpan.classList.add("hidden");
+      signupContainer.classList.add("hidden");
+    }
+    // Refresh to show/hide delete buttons
+    fetchActivities();
+  }
+
+  // Login modal open/close
+  loginBtn.addEventListener("click", () => {
+    loginModal.classList.remove("hidden");
+    loginError.classList.add("hidden");
+    loginForm.reset();
+  });
+
+  cancelLoginBtn.addEventListener("click", () => {
+    loginModal.classList.add("hidden");
+  });
+
+  loginModal.addEventListener("click", (e) => {
+    if (e.target === loginModal) loginModal.classList.add("hidden");
+  });
+
+  // Login form submit
+  loginForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const username = document.getElementById("username").value;
+    const password = document.getElementById("password").value;
+
+    try {
+      const response = await fetch("/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password }),
+      });
+
+      const result = await response.json();
+
+      if (response.ok) {
+        sessionToken = result.token;
+        teacherName = result.name;
+        sessionStorage.setItem("sessionToken", sessionToken);
+        sessionStorage.setItem("teacherName", teacherName);
+        loginModal.classList.add("hidden");
+        updateAuthUI();
+      } else {
+        loginError.textContent = result.detail || "Login failed";
+        loginError.classList.remove("hidden");
+      }
+    } catch (error) {
+      loginError.textContent = "Login failed. Please try again.";
+      loginError.classList.remove("hidden");
+    }
+  });
+
+  // Logout
+  logoutBtn.addEventListener("click", async () => {
+    try {
+      await fetch("/auth/logout", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${sessionToken}` },
+      });
+    } finally {
+      sessionToken = null;
+      teacherName = null;
+      sessionStorage.removeItem("sessionToken");
+      sessionStorage.removeItem("teacherName");
+      updateAuthUI();
+    }
+  });
 
   // Function to fetch activities from API
   async function fetchActivities() {
@@ -30,7 +126,11 @@ document.addEventListener("DOMContentLoaded", () => {
                 ${details.participants
                   .map(
                     (email) =>
-                      `<li><span class="participant-email">${email}</span><button class="delete-btn" data-activity="${name}" data-email="${email}">❌</button></li>`
+                      `<li><span class="participant-email">${email}</span>${
+                        isLoggedIn()
+                          ? `<button class="delete-btn" data-activity="${name}" data-email="${email}">❌</button>`
+                          : ""
+                      }</li>`
                   )
                   .join("")}
               </ul>
@@ -80,6 +180,7 @@ document.addEventListener("DOMContentLoaded", () => {
         )}/unregister?email=${encodeURIComponent(email)}`,
         {
           method: "DELETE",
+          headers: { Authorization: `Bearer ${sessionToken}` },
         }
       );
 
@@ -124,6 +225,7 @@ document.addEventListener("DOMContentLoaded", () => {
         )}/signup?email=${encodeURIComponent(email)}`,
         {
           method: "POST",
+          headers: { Authorization: `Bearer ${sessionToken}` },
         }
       );
 
@@ -156,5 +258,5 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   // Initialize app
-  fetchActivities();
+  updateAuthUI();
 });
